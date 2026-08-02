@@ -94,6 +94,8 @@ const WTAblauf = () => {
     let finalValue;
     if (field === 'remark') {
       finalValue = value;
+    } else if (field === 'quality_ok') {
+      finalValue = Boolean(value);
     } else if (field === 'target_count') {
       const strVal = String(value).replace(',', '.');
       finalValue = strVal === '' || isNaN(parseFloat(strVal)) ? 0 : parseFloat(strVal);
@@ -102,7 +104,7 @@ const WTAblauf = () => {
     }
     
     // Find the specific date for this row
-    const currentRow = counts.find(c => c.line === line) || { count: 0, magazin_count: 0, remark: '' };
+    const currentRow = counts.find(c => c.line === line) || { count: 0, magazin_count: 0, quality_ok: true, remark: '' };
     const dateStr = currentRow?.created_at || format(selectedDate, 'yyyy-MM-dd');
 
     // LOGIC RULE: Magazin cannot be greater than WT IST (only for numeric fields)
@@ -113,7 +115,7 @@ const WTAblauf = () => {
     setCounts(prev => {
       const exists = prev.some(c => c.line === line);
       if (!exists) {
-        return [...prev, { line, count: 0, target_count: 0, magazin_count: 0, remark: '', created_at: dateStr, [field]: finalValue }];
+        return [...prev, { line, count: 0, target_count: 0, magazin_count: 0, quality_ok: true, remark: '', created_at: dateStr, [field]: finalValue }];
       }
       
       return prev.map(c => {
@@ -158,6 +160,7 @@ const WTAblauf = () => {
               target_count: field === 'target_count' ? finalValue : 0,
               count: field === 'count' ? finalValue : 0,
               magazin_count: field === 'magazin_count' ? finalValue : 0,
+              quality_ok: field === 'quality_ok' ? finalValue : true,
               remark: field === 'remark' ? finalValue : ''
             }]);
           if (insertError) throw insertError;
@@ -199,6 +202,7 @@ const WTAblauf = () => {
             count: 0,
             target_count: 0,
             magazin_count: 0,
+            quality_ok: true,
             created_at: dateStr
           }));
         
@@ -221,7 +225,8 @@ const WTAblauf = () => {
           line: Number(d.line),
           target_count: d.target_count != null ? Number(d.target_count) : 0,
           count: Number(d.count || 0),
-          magazin_count: Number(d.magazin_count || 0)
+          magazin_count: Number(d.magazin_count || 0),
+          quality_ok: d.quality_ok !== false
         }));
         setCounts(parsedData.sort((a, b) => a.line - b.line));
       }
@@ -297,6 +302,7 @@ const WTAblauf = () => {
     let targetSum = 0;
     let countSum = 0;
     let magazinSum = 0;
+    let nokCount = 0;
 
     hours.forEach((h) => {
       const line = getLineFromHour(h);
@@ -305,6 +311,7 @@ const WTAblauf = () => {
         targetSum += Number(row.target_count || 0);
         countSum += Number(row.count || 0);
         magazinSum += Number(row.magazin_count || 0);
+        if (row.quality_ok === false) nokCount++;
       }
     });
 
@@ -313,13 +320,13 @@ const WTAblauf = () => {
     const magazin = round2(magazinSum);
     const eff = target > 0 ? Math.round((count / target) * 100) : 0;
 
-    return { target, count, magazin, eff };
+    return { target, count, magazin, eff, nokCount };
   };
 
   const handleExportPDF = () => { window.print(); };
 
   const handleExportCSV = () => {
-    const headers = ['Stunde', 'Ziel', 'Ist', 'Magazin', 'Differenz', 'Bemerkung'];
+    const headers = ['Stunde', 'Ziel', 'Ist', 'Magazin', 'Qualität', 'Differenz', 'Bemerkung'];
     const rows = counts.map(c => {
       const start = (c.line - 1 + 6) % 24;
       const end = (start + 1) % 24;
@@ -330,6 +337,7 @@ const WTAblauf = () => {
         round2(c.target_count),
         c.count,
         c.magazin_count,
+        c.quality_ok !== false ? 'i.O.' : 'n.i.O.',
         round2(c.count - c.target_count),
         `"${(c.remark || '').replace(/"/g, '""')}"`
       ];
@@ -690,6 +698,7 @@ const WTAblauf = () => {
               <span>WT ZIEL</span>
               <span>WT IST</span>
               <span>davon Magazin</span>
+              <span>QUALITÄT</span>
               <span>STATUS</span>
               <span>BEMERKUNG</span>
             </div>
@@ -697,7 +706,7 @@ const WTAblauf = () => {
             <div className="wt-table-body">
               {(shifts[activeShift] || shifts[Object.keys(shifts)[0]] || []).map((hour) => {
                 const line = getLineFromHour(hour);
-                const rowData = counts.find(c => c.line === line) || { target_count: 0, count: 0, magazin_count: 0 };
+                const rowData = counts.find(c => c.line === line) || { target_count: 0, count: 0, magazin_count: 0, quality_ok: true };
                 const isMet = rowData.count >= rowData.target_count && rowData.target_count > 0;
 
                 return (
@@ -754,6 +763,18 @@ const WTAblauf = () => {
                       )}
                     </div>
 
+                    <div className="col-quality">
+                      <button
+                        type="button"
+                        className={`quality-toggle-btn ${rowData.quality_ok !== false ? 'ok' : 'nok'} ${savingLines[`${line}-quality_ok`] || ''}`}
+                        onClick={() => handleCountChange(line, 'quality_ok', rowData.quality_ok === false)}
+                        title={rowData.quality_ok !== false ? 'Qualität gut (i.O.)' : 'Qualität schlecht (n.i.O.)'}
+                      >
+                        <span className="quality-led" />
+                        <span className="quality-text">{rowData.quality_ok !== false ? 'i.O.' : 'n.i.O.'}</span>
+                      </button>
+                    </div>
+
                     <div className="col-status">
                       {rowData.target_count > 0 ? (
                         <span className={`status-badge ${rowData.count > rowData.target_count ? 'over-met' : isMet ? 'met' : 'behind'}`}>
@@ -799,6 +820,12 @@ const WTAblauf = () => {
                       <div className="actual-display">
                         <span className="val">{activeTotals.magazin}</span>
                       </div>
+                    </div>
+
+                    <div className="col-quality">
+                      <span className={`status-badge ${activeTotals.nokCount === 0 ? 'met' : 'behind'}`}>
+                        {activeTotals.nokCount === 0 ? 'i.O.' : `${activeTotals.nokCount} n.i.O.`}
+                      </span>
                     </div>
 
                     <div className="col-status">
