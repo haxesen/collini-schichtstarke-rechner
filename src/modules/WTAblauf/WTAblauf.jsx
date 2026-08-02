@@ -45,16 +45,31 @@ const WTAblauf = () => {
   const [weeklyData, setWeeklyData] = useState([]);
   const [selectedDate, setSelectedDate] = useState(getProductionDate());
   
-  // Auto-detect current shift based on hour
-  const getCurrentShift = () => {
+  const [shiftMode, setShiftMode] = useState(() => {
+    return localStorage.getItem('collini_wt_shift_mode') || '8h';
+  });
+
+  // Auto-detect current shift based on hour and mode
+  const getCurrentShift = (mode = shiftMode) => {
     const hour = new Date().getHours();
-    if (hour >= 6 && hour < 14) return '1. Schicht';
-    if (hour >= 14 && hour < 22) return '2. Schicht';
-    return '3. Schicht';
+    if (mode === '12h') {
+      if (hour >= 6 && hour < 18) return '1. Schicht (12h)';
+      return '2. Schicht (12h)';
+    } else {
+      if (hour >= 6 && hour < 14) return '1. Schicht';
+      if (hour >= 14 && hour < 22) return '2. Schicht';
+      return '3. Schicht';
+    }
   };
 
-  const [activeShift, setActiveShift] = useState(getCurrentShift());
+  const [activeShift, setActiveShift] = useState(() => getCurrentShift(shiftMode));
   const [, setTick] = useState(0);
+
+  const changeShiftMode = (newMode) => {
+    setShiftMode(newMode);
+    localStorage.setItem('collini_wt_shift_mode', newMode);
+    setActiveShift(getCurrentShift(newMode));
+  };
 
   // Update playhead every minute
   useEffect(() => {
@@ -62,22 +77,35 @@ const WTAblauf = () => {
     return () => clearInterval(timer);
   }, []);
 
-  const shifts = {
+  const shifts = shiftMode === '12h' ? {
+    '1. Schicht (12h)': [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17],
+    '2. Schicht (12h)': [18, 19, 20, 21, 22, 23, 0, 1, 2, 3, 4, 5]
+  } : {
     '1. Schicht': [6, 7, 8, 9, 10, 11, 12, 13],
     '2. Schicht': [14, 15, 16, 17, 18, 19, 20, 21],
     '3. Schicht': [22, 23, 0, 1, 2, 3, 4, 5]
   };
 
+  const getLineFromHour = (h) => ((h - 6 + 24) % 24) + 1;
+
+  const round2 = (num) => Math.round((Number(num) || 0) * 100) / 100;
+
   const handleCountChange = (line, field, value) => {
-    // If it's a remark, we treat it as a string, otherwise as a number
-    const processedValue = field === 'remark' ? value : (parseInt(value) || 0);
+    let finalValue;
+    if (field === 'remark') {
+      finalValue = value;
+    } else if (field === 'target_count') {
+      const strVal = String(value).replace(',', '.');
+      finalValue = strVal === '' || isNaN(parseFloat(strVal)) ? 0 : parseFloat(strVal);
+    } else {
+      finalValue = parseInt(value, 10) || 0;
+    }
     
     // Find the specific date for this row
     const currentRow = counts.find(c => c.line === line) || { count: 0, magazin_count: 0, remark: '' };
     const dateStr = currentRow?.created_at || format(selectedDate, 'yyyy-MM-dd');
 
     // LOGIC RULE: Magazin cannot be greater than WT IST (only for numeric fields)
-    let finalValue = processedValue;
     if (field === 'magazin_count' && typeof finalValue === 'number' && finalValue > currentRow.count) {
       finalValue = currentRow.count;
     }
@@ -188,7 +216,13 @@ const WTAblauf = () => {
       }
       
       if (dbData) {
-        const parsedData = dbData.map(d => ({ ...d, line: Number(d.line) }));
+        const parsedData = dbData.map(d => ({ 
+          ...d, 
+          line: Number(d.line),
+          target_count: d.target_count != null ? Number(d.target_count) : 0,
+          count: Number(d.count || 0),
+          magazin_count: Number(d.magazin_count || 0)
+        }));
         setCounts(parsedData.sort((a, b) => a.line - b.line));
       }
     } catch (err) {
@@ -216,12 +250,13 @@ const WTAblauf = () => {
         const dateStr = format(date, 'yyyy-MM-dd');
         // Supabase returns timestamps like "2026-05-13T00:00:00", so we use startsWith
         const dayRecords = dbData.filter(r => r.created_at && r.created_at.startsWith(dateStr));
+        const rawZiel = dayRecords.reduce((sum, r) => sum + (Number(r.target_count) || 0), 0);
         return {
           date: dateStr,
           displayDate: format(date, 'dd.MM.'),
           dayName: format(date, 'EEEE', { locale: de }),
           ist: dayRecords.reduce((sum, r) => sum + (r.count || 0), 0),
-          ziel: dayRecords.reduce((sum, r) => sum + (r.target_count || 0), 0),
+          ziel: round2(rawZiel),
           magazin: dayRecords.reduce((sum, r) => sum + (r.magazin_count || 0), 0)
         };
       });
@@ -257,29 +292,45 @@ const WTAblauf = () => {
     return () => supabase.removeChannel(channel);
   }, [fetchDailyData, fetchWeeklyData, selectedDate]);
 
+  const getShiftTotals = (shiftName) => {
+    const hours = shifts[shiftName] || [];
+    let targetSum = 0;
+    let countSum = 0;
+    let magazinSum = 0;
+
+    hours.forEach((h) => {
+      const line = getLineFromHour(h);
+      const row = counts.find(c => c.line === line);
+      if (row) {
+        targetSum += Number(row.target_count || 0);
+        countSum += Number(row.count || 0);
+        magazinSum += Number(row.magazin_count || 0);
+      }
+    });
+
+    const target = round2(targetSum);
+    const count = round2(countSum);
+    const magazin = round2(magazinSum);
+    const eff = target > 0 ? Math.round((count / target) * 100) : 0;
+
+    return { target, count, magazin, eff };
+  };
+
   const handleExportPDF = () => { window.print(); };
 
   const handleExportCSV = () => {
     const headers = ['Stunde', 'Ziel', 'Ist', 'Magazin', 'Differenz', 'Bemerkung'];
     const rows = counts.map(c => {
-      // Find the hour for this line
-      let hourStr = '';
-      Object.entries(shifts).forEach(([name, hours]) => {
-        const lineOffset = name === '2. Schicht' ? 8 : name === '3. Schicht' ? 16 : 0;
-        const localIdx = c.line - 1 - lineOffset;
-        if (localIdx >= 0 && localIdx < 8) {
-          const start = hours[localIdx];
-          const end = (start + 1) % 24;
-          hourStr = `${start.toString().padStart(2, '0')}:00-${end.toString().padStart(2, '0')}:00`;
-        }
-      });
+      const start = (c.line - 1 + 6) % 24;
+      const end = (start + 1) % 24;
+      const hourStr = `${start.toString().padStart(2, '0')}:00-${end.toString().padStart(2, '0')}:00`;
 
       return [
         hourStr,
-        c.target_count,
+        round2(c.target_count),
         c.count,
         c.magazin_count,
-        (c.count - c.target_count),
+        round2(c.count - c.target_count),
         `"${(c.remark || '').replace(/"/g, '""')}"`
       ];
     });
@@ -304,16 +355,13 @@ const WTAblauf = () => {
 
   const renderStats = () => {
     // Calculate shift totals first for absolute consistency
-    const shiftData = Object.entries(shifts).map(([name, hours]) => {
-      const shiftLines = hours.map((h, i) => i + 1 + (name === '2. Schicht' ? 8 : name === '3. Schicht' ? 16 : 0));
-      const ist = shiftLines.reduce((sum, line) => sum + (counts.find(c => c.line === line)?.count || 0), 0);
-      const ziel = shiftLines.reduce((sum, line) => sum + (counts.find(c => c.line === line)?.target_count || 0), 0);
-      const magazin = shiftLines.reduce((sum, line) => sum + (counts.find(c => c.line === line)?.magazin_count || 0), 0);
-      return { name, ist, ziel, magazin, eff: ziel > 0 ? Math.round((ist / ziel) * 100) : 0 };
+    const shiftData = Object.entries(shifts).map(([name]) => {
+      const totals = getShiftTotals(name);
+      return { name, ist: totals.count, ziel: totals.target, magazin: totals.magazin, eff: totals.eff };
     });
 
     const totalIst = shiftData.reduce((sum, s) => sum + s.ist, 0);
-    const totalZiel = shiftData.reduce((sum, s) => sum + s.ziel, 0);
+    const totalZiel = round2(shiftData.reduce((sum, s) => sum + s.ziel, 0));
     const totalMagazin = shiftData.reduce((sum, s) => sum + s.magazin, 0);
     
     const dailyEfficiency = totalZiel > 0 ? Math.round((totalIst / totalZiel) * 100) : 0;
@@ -600,17 +648,37 @@ const WTAblauf = () => {
         <div className={`wt-content-grid ${isMobile ? 'wt-content-grid-mobile' : ''} animate-fade-in`}>
           <div className="main-table-card glass-panel">
             <div className="shift-tabs-container">
-              <div className="shift-tabs-pill">
-                {Object.keys(shifts).map(s => (
+              <div className="shift-controls-group">
+                <div className="shift-tabs-pill">
+                  {(shifts[activeShift] ? Object.keys(shifts) : Object.keys(shifts)).map(s => (
+                    <button 
+                      key={s}
+                      className={`shift-tab-btn ${activeShift === s ? 'active' : ''}`}
+                      onClick={() => setActiveShift(s)}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="shift-mode-toggle">
                   <button 
-                    key={s}
-                    className={`shift-tab-btn ${activeShift === s ? 'active' : ''}`}
-                    onClick={() => setActiveShift(s)}
+                    className={`mode-toggle-btn ${shiftMode === '8h' ? 'active' : ''}`}
+                    onClick={() => changeShiftMode('8h')}
+                    title="3 Schichten à 8 Stunden"
                   >
-                    {s}
+                    8h (3 Schichten)
                   </button>
-                ))}
+                  <button 
+                    className={`mode-toggle-btn ${shiftMode === '12h' ? 'active' : ''}`}
+                    onClick={() => changeShiftMode('12h')}
+                    title="2 Schichten à 12 Stunden"
+                  >
+                    12h (2 Schichten)
+                  </button>
+                </div>
               </div>
+
               <div className="auto-save-indicator">
                 <Database size={14} className="text-success" />
                 Synchronisiert
@@ -627,8 +695,8 @@ const WTAblauf = () => {
             </div>
 
             <div className="wt-table-body">
-              {shifts[activeShift].map((hour, idx) => {
-                const line = idx + 1 + (activeShift === '2. Schicht' ? 8 : activeShift === '3. Schicht' ? 16 : 0);
+              {(shifts[activeShift] || shifts[Object.keys(shifts)[0]] || []).map((hour) => {
+                const line = getLineFromHour(hour);
                 const rowData = counts.find(c => c.line === line) || { target_count: 0, count: 0, magazin_count: 0 };
                 const isMet = rowData.count >= rowData.target_count && rowData.target_count > 0;
 
@@ -646,6 +714,7 @@ const WTAblauf = () => {
                       {!isMobile ? (
                         <input
                           type="number"
+                          step="any"
                           value={rowData.target_count}
                           onChange={(e) => handleCountChange(line, 'target_count', e.target.value)}
                           className={`count-input target ${savingLines[`${line}-target_count`] || ''}`}
@@ -706,66 +775,44 @@ const WTAblauf = () => {
                 );
               })}
               
-              <div className="wt-row totals-row">
-                <div className="col-hour">
-                  <span>Gesamt</span>
-                </div>
-                
-                <div className="col-target">
-                  <div className="actual-display">
-                    <span className="val">
-                      {shifts[activeShift].reduce((sum, h, idx) => {
-                        const line = idx + 1 + (activeShift === '2. Schicht' ? 8 : activeShift === '3. Schicht' ? 16 : 0);
-                        return sum + (counts.find(c => c.line === line)?.target_count || 0);
-                      }, 0)}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="col-ist">
-                  <div className="actual-display">
-                    <span className="val">
-                      {shifts[activeShift].reduce((sum, h, idx) => {
-                        const line = idx + 1 + (activeShift === '2. Schicht' ? 8 : activeShift === '3. Schicht' ? 16 : 0);
-                        return sum + (counts.find(c => c.line === line)?.count || 0);
-                      }, 0)}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="col-magazin">
-                  <div className="actual-display">
-                    <span className="val">
-                      {shifts[activeShift].reduce((sum, h, idx) => {
-                        const line = idx + 1 + (activeShift === '2. Schicht' ? 8 : activeShift === '3. Schicht' ? 16 : 0);
-                        return sum + (counts.find(c => c.line === line)?.magazin_count || 0);
-                      }, 0)}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="col-status">
-                  {(() => {
-                    const totalTarget = shifts[activeShift].reduce((sum, h, idx) => {
-                      const line = idx + 1 + (activeShift === '2. Schicht' ? 8 : activeShift === '3. Schicht' ? 16 : 0);
-                      return sum + (counts.find(c => c.line === line)?.target_count || 0);
-                    }, 0);
-                    const totalCount = shifts[activeShift].reduce((sum, h, idx) => {
-                      const line = idx + 1 + (activeShift === '2. Schicht' ? 8 : activeShift === '3. Schicht' ? 16 : 0);
-                      return sum + (counts.find(c => c.line === line)?.count || 0);
-                    }, 0);
+              {(() => {
+                const activeTotals = getShiftTotals(activeShift);
+                return (
+                  <div className="wt-row totals-row">
+                    <div className="col-hour">
+                      <span>Gesamt</span>
+                    </div>
                     
-                    if (totalTarget === 0) return '-';
-                    return (
-                      <span className={`status-badge ${totalCount > totalTarget ? 'over-met' : totalCount >= totalTarget ? 'met' : 'behind'}`}>
-                        {totalCount > totalTarget ? 'ÜBERERFÜLLT' : totalCount >= totalTarget ? 'ERFÜLLT' : 'RÜCKSTAND'}
-                      </span>
-                    );
-                  })()}
-                </div>
+                    <div className="col-target">
+                      <div className="actual-display">
+                        <span className="val">{activeTotals.target}</span>
+                      </div>
+                    </div>
 
-                <div className="col-remark"></div>
-              </div>
+                    <div className="col-ist">
+                      <div className="actual-display">
+                        <span className="val">{activeTotals.count}</span>
+                      </div>
+                    </div>
+
+                    <div className="col-magazin">
+                      <div className="actual-display">
+                        <span className="val">{activeTotals.magazin}</span>
+                      </div>
+                    </div>
+
+                    <div className="col-status">
+                      {activeTotals.target === 0 ? '-' : (
+                        <span className={`status-badge ${activeTotals.count > activeTotals.target ? 'over-met' : activeTotals.count >= activeTotals.target ? 'met' : 'behind'}`}>
+                          {activeTotals.count > activeTotals.target ? 'ÜBERERFÜLLT' : activeTotals.count >= activeTotals.target ? 'ERFÜLLT' : 'RÜCKSTAND'}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="col-remark"></div>
+                  </div>
+                );
+              })()}
             </div>
           </div>
 
@@ -774,24 +821,12 @@ const WTAblauf = () => {
               <div className="card-title"><TrendingUp size={18} /> Schicht-Effizienz</div>
               <div className="efficiency-box">
                 <div className="efficiency-value">
-                  {Math.round((shifts[activeShift].reduce((sum, h, idx) => {
-                    const line = idx + 1 + (activeShift === '2. Schicht' ? 8 : activeShift === '3. Schicht' ? 16 : 0);
-                    return sum + (counts.find(c => c.line === line)?.count || 0);
-                  }, 0) / Math.max(1, shifts[activeShift].reduce((sum, h, idx) => {
-                    const line = idx + 1 + (activeShift === '2. Schicht' ? 8 : activeShift === '3. Schicht' ? 16 : 0);
-                    return sum + (counts.find(c => c.line === line)?.target_count || 0);
-                  }, 0))) * 100)}%
+                  {getShiftTotals(activeShift).eff}%
                 </div>
                 <div className="efficiency-label">Zielerreichung</div>
                 <div className="efficiency-progress-bg">
                   <div className="efficiency-progress-fill" style={{ 
-                    width: `${Math.min(100, (shifts[activeShift].reduce((sum, h, idx) => {
-                      const line = idx + 1 + (activeShift === '2. Schicht' ? 8 : activeShift === '3. Schicht' ? 16 : 0);
-                      return sum + (counts.find(c => c.line === line)?.count || 0);
-                    }, 0) / Math.max(1, shifts[activeShift].reduce((sum, h, idx) => {
-                      const line = idx + 1 + (activeShift === '2. Schicht' ? 8 : activeShift === '3. Schicht' ? 16 : 0);
-                      return sum + (counts.find(c => c.line === line)?.target_count || 0);
-                    }, 0))) * 100)}%`,
+                    width: `${Math.min(100, getShiftTotals(activeShift).eff)}%`,
                     background: 'var(--accent-gradient)'
                   }} />
                 </div>
