@@ -4790,10 +4790,85 @@ body.wide-layout .header-top-classic {
 .adjust-btn:hover { background: var(--accent-cyan); }
 .adjust-btn.plus { color: #2ecc71; }
 .adjust-btn.minus { color: #ff4757; }
+.missing-entries-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(255, 171, 0, 0.1);
+  border: 1px solid rgba(255, 171, 0, 0.35);
+  color: #ffc107;
+  padding: 12px 22px;
+  border-radius: 14px;
+  margin-bottom: 20px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  box-shadow: 0 4px 20px rgba(255, 171, 0, 0.12);
+  backdrop-filter: blur(10px);
+}
+
+.text-warning-icon { color: #ffc107; animation: pulse-icon 1.5s infinite ease-in-out; }
+@keyframes pulse-icon { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.2); } }
+
+.wt-row.row-unfilled-warning {
+  background: rgba(255, 171, 0, 0.04) !important;
+  border-left: 4px solid #ffab00 !important;
+  animation: warning-pulse 2.5s infinite ease-in-out;
+}
+
+@keyframes warning-pulse {
+  0% { box-shadow: inset 0 0 0 0 rgba(255, 171, 0, 0); }
+  50% { box-shadow: inset 0 0 20px 0 rgba(255, 171, 0, 0.12); }
+  100% { box-shadow: inset 0 0 0 0 rgba(255, 171, 0, 0); }
+}
+
+.wt-row.row-current-active {
+  background: rgba(0, 242, 254, 0.03) !important;
+  border-left: 4px solid var(--accent-cyan) !important;
+}
+
+.current-hour-text {
+  color: var(--accent-cyan) !important;
+  font-weight: 900 !important;
+}
+
+.hour-warning-dot {
+  width: 8px;
+  height: 8px;
+  background: #ffab00;
+  border-radius: 50%;
+  box-shadow: 0 0 10px rgba(255, 171, 0, 0.8);
+  animation: pulse-dot 1s infinite ease-in-out;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(1.3); }
+}
 
 .status-badge { padding: 8px 16px; border-radius: 20px; font-size: 0.8rem; font-weight: 800; text-transform: uppercase; }
 .status-badge.met { background: rgba(46, 204, 113, 0.1); color: #2ecc71; border: 1px solid rgba(46, 204, 113, 0.2); }
 .status-badge.over-met { background: rgba(46, 204, 113, 0.2); color: #2ecc71; border: 1px solid #2ecc71; box-shadow: 0 0 15px rgba(46, 204, 113, 0.3); font-weight: 900; }
+.status-badge.missing {
+  background: rgba(255, 171, 0, 0.15);
+  color: #ffc107;
+  border: 1px solid rgba(255, 171, 0, 0.4);
+  box-shadow: 0 0 12px rgba(255, 171, 0, 0.2);
+  font-weight: 900;
+  animation: badge-pulse 1.8s infinite ease-in-out;
+}
+
+@keyframes badge-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.03); }
+}
+
+.status-badge.live-hour {
+  background: rgba(0, 242, 254, 0.12);
+  color: var(--accent-cyan);
+  border: 1px solid rgba(0, 242, 254, 0.3);
+  box-shadow: 0 0 10px rgba(0, 242, 254, 0.2);
+  font-weight: 800;
+}
 
 .remark-input {
   width: 100%;

@@ -88,6 +88,28 @@ const WTAblauf = () => {
 
   const getLineFromHour = (h) => ((h - 6 + 24) % 24) + 1;
 
+  const isHourPassed = (hour) => {
+    const prodDateStr = format(getProductionDate(selectedDate), 'yyyy-MM-dd');
+    const todayProdDateStr = format(getProductionDate(new Date()), 'yyyy-MM-dd');
+
+    if (prodDateStr < todayProdDateStr) return true;
+    if (prodDateStr > todayProdDateStr) return false;
+
+    const currentHour = new Date().getHours();
+    const hourOffset = (hour - 6 + 24) % 24;
+    const currentOffset = (currentHour - 6 + 24) % 24;
+
+    return hourOffset < currentOffset;
+  };
+
+  const isCurrentHour = (hour) => {
+    const prodDateStr = format(getProductionDate(selectedDate), 'yyyy-MM-dd');
+    const todayProdDateStr = format(getProductionDate(new Date()), 'yyyy-MM-dd');
+    if (prodDateStr !== todayProdDateStr) return false;
+
+    return hour === new Date().getHours();
+  };
+
   const round2 = (num) => Math.round((Number(num) || 0) * 100) / 100;
 
   const handleCountChange = (line, field, value) => {
@@ -693,6 +715,26 @@ const WTAblauf = () => {
               </div>
             </div>
 
+            {(() => {
+              const activeHours = shifts[activeShift] || shifts[Object.keys(shifts)[0]] || [];
+              const missingCount = activeHours.filter(h => {
+                const line = getLineFromHour(h);
+                const r = counts.find(c => c.line === line);
+                return isHourPassed(h) && (!r || (r.count === 0 && r.target_count === 0));
+              }).length;
+
+              if (missingCount === 0) return null;
+
+              return (
+                <div className="missing-entries-banner animate-fade-in">
+                  <AlertCircle size={18} className="text-warning-icon" />
+                  <span>
+                    <strong>Achtung:</strong> In dieser Schicht fehlt für <strong>{missingCount} Stunde{missingCount > 1 ? 'n' : ''}</strong> noch die Eingabe!
+                  </span>
+                </div>
+              );
+            })()}
+
             <div className="wt-table-header">
               <span>STUNDE</span>
               <span>WT ZIEL</span>
@@ -708,15 +750,19 @@ const WTAblauf = () => {
                 const line = getLineFromHour(hour);
                 const rowData = counts.find(c => c.line === line) || { target_count: 0, count: 0, magazin_count: 0, quality_ok: true };
                 const isMet = rowData.count >= rowData.target_count && rowData.target_count > 0;
+                const passed = isHourPassed(hour);
+                const activeNow = isCurrentHour(hour);
+                const isUnfilled = passed && rowData.count === 0 && rowData.target_count === 0;
 
                 return (
-                  <div key={line} className="wt-row">
+                  <div key={line} className={`wt-row ${isUnfilled ? 'row-unfilled-warning' : ''} ${activeNow ? 'row-current-active' : ''}`}>
                     <div className="col-hour">
-                      <Clock size={16} className="text-secondary" />
-                      <span>
+                      <Clock size={16} className={activeNow ? 'text-accent' : isUnfilled ? 'text-warning-icon' : 'text-secondary'} />
+                      <span className={activeNow ? 'current-hour-text' : ''}>
                         {hour.toString().padStart(2, '0')}:00 - {((hour + 1) % 24).toString().padStart(2, '0')}:00
                       </span>
                       {isMet && <div className="hour-dot" />}
+                      {isUnfilled && <div className="hour-warning-dot" title="Eingabe fehlt!" />}
                     </div>
                     
                     <div className="col-target">
@@ -776,7 +822,15 @@ const WTAblauf = () => {
                     </div>
 
                     <div className="col-status">
-                      {rowData.target_count > 0 ? (
+                      {isUnfilled ? (
+                        <span className="status-badge missing" title="Diese Stunde ist vergangen, wurde aber noch nicht ausgefüllt!">
+                          ⚠️ EINGABE FEHLT
+                        </span>
+                      ) : activeNow && rowData.count === 0 && rowData.target_count === 0 ? (
+                        <span className="status-badge live-hour">
+                          ⚡ AKTUELL
+                        </span>
+                      ) : rowData.target_count > 0 ? (
                         <span className={`status-badge ${rowData.count > rowData.target_count ? 'over-met' : isMet ? 'met' : 'behind'}`}>
                           {rowData.count > rowData.target_count ? 'ÜBERERFÜLLT' : isMet ? 'ERFÜLLT' : 'RÜCKSTAND'}
                         </span>
