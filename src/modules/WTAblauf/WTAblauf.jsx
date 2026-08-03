@@ -17,10 +17,11 @@ import {
   Calendar,
   LayoutDashboard,
   Loader2,
-  Info
+  Info,
+  X
 } from 'lucide-react';
 import { supabase } from '../../supabase';
-import { format, subDays, addDays, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay } from 'date-fns';
+import { format, subDays, addDays, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay, getISOWeek, setISOWeek, getYear } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { useApp } from '../../context/AppContext';
 
@@ -44,7 +45,24 @@ const WTAblauf = () => {
   const [data, setData] = useState({});
   const [weeklyData, setWeeklyData] = useState([]);
   const [selectedDate, setSelectedDate] = useState(getProductionDate());
-  
+  const [showKWPicker, setShowKWPicker] = useState(false);
+  const [pickerYear, setPickerYear] = useState(() => getYear(selectedDate));
+  const activeKWRef = useRef(null);
+
+  useEffect(() => {
+    if (showKWPicker) {
+      setTimeout(() => {
+        activeKWRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 60);
+    }
+  }, [showKWPicker, pickerYear]);
+
+  const handleSelectKW = (kwNum) => {
+    const baseDate = new Date(pickerYear, 0, 4);
+    const targetDate = setISOWeek(baseDate, kwNum);
+    setSelectedDate(targetDate);
+    setShowKWPicker(false);
+  };
   const [shiftMode, setShiftMode] = useState(() => {
     return localStorage.getItem('collini_wt_shift_mode') || '8h';
   });
@@ -552,7 +570,7 @@ const WTAblauf = () => {
           <span className="print-date">{format(new Date(), 'dd.MM.yyyy HH:mm')}</span>
         </div>
         <div className="print-module-title">
-          <h1>WT-ABLAUF SCHICHTBERICHT</h1>
+          <h1>WT-ABLAUF SCHICHTBERICHT (KW {getISOWeek(selectedDate)})</h1>
           {selectedLine && <span className="line-badge">{selectedLine}</span>}
         </div>
       </div>
@@ -562,13 +580,42 @@ const WTAblauf = () => {
           <button onClick={() => setView('hub')} className="back-btn">
             <ChevronLeft size={20} /> {t.back}
           </button>
-          <h1 style={{ display: 'flex', alignItems: 'center', gap: '20px', margin: 0, textTransform: 'uppercase' }}>
+          <h1 style={{ display: 'flex', alignItems: 'center', gap: '15px', margin: 0, textTransform: 'uppercase' }}>
             WT-ABLAUF
             {selectedLine && <span className="line-badge" style={{ fontSize: '1rem', verticalAlign: 'middle' }}>{selectedLine}</span>}
           </h1>
         </div>
         
-        <div className="header-right">
+        <div className="header-right" style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+          <div 
+            className="kw-badge-header" 
+            onClick={() => {
+              setPickerYear(getYear(selectedDate));
+              setShowKWPicker(true);
+            }}
+            title="Klick zum Wechseln der Kalenderwoche"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              background: 'linear-gradient(135deg, rgba(0, 242, 254, 0.18) 0%, rgba(0, 242, 254, 0.05) 100%)',
+              color: 'var(--accent-cyan)',
+              border: '1px solid rgba(0, 242, 254, 0.4)',
+              padding: '6px 14px',
+              borderRadius: '8px',
+              fontWeight: 800,
+              fontSize: '0.85rem',
+              letterSpacing: '1.5px',
+              boxShadow: '0 0 12px rgba(0, 242, 254, 0.15)',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              userSelect: 'none'
+            }}
+          >
+            <Calendar size={15} />
+            <span>KW {getISOWeek(selectedDate)}</span>
+          </div>
+
           <div className="mode-toggle">
             <button 
               className={`mode-btn ${mode === 'tracking' ? 'active' : ''}`}
@@ -720,7 +767,9 @@ const WTAblauf = () => {
               const missingCount = activeHours.filter(h => {
                 const line = getLineFromHour(h);
                 const r = counts.find(c => c.line === line);
-                return isHourPassed(h) && (!r || (r.count === 0 && r.target_count === 0));
+                const target = Number(r?.target_count || 0);
+                const count = Number(r?.count || 0);
+                return isHourPassed(h) && target > 0 && count === 0;
               }).length;
 
               if (missingCount === 0) return null;
@@ -749,10 +798,12 @@ const WTAblauf = () => {
               {(shifts[activeShift] || shifts[Object.keys(shifts)[0]] || []).map((hour) => {
                 const line = getLineFromHour(hour);
                 const rowData = counts.find(c => c.line === line) || { target_count: 0, count: 0, magazin_count: 0, quality_ok: true };
-                const isMet = rowData.count >= rowData.target_count && rowData.target_count > 0;
+                const targetNum = Number(rowData.target_count || 0);
+                const countNum = Number(rowData.count || 0);
+                const isMet = countNum >= targetNum && targetNum > 0;
                 const passed = isHourPassed(hour);
                 const activeNow = isCurrentHour(hour);
-                const isUnfilled = passed && rowData.count === 0 && rowData.target_count === 0;
+                const isUnfilled = passed && targetNum > 0 && countNum === 0;
 
                 return (
                   <div key={line} className={`wt-row ${isUnfilled ? 'row-unfilled-warning' : ''} ${activeNow ? 'row-current-active' : ''}`}>
@@ -761,7 +812,7 @@ const WTAblauf = () => {
                       <span className={activeNow ? 'current-hour-text' : ''}>
                         {hour.toString().padStart(2, '0')}:00 - {((hour + 1) % 24).toString().padStart(2, '0')}:00
                       </span>
-                      {isMet && <div className="hour-dot" />}
+                        {isMet && <div className="hour-dot" />}
                       {isUnfilled && <div className="hour-warning-dot" title="Eingabe fehlt!" />}
                     </div>
                     
@@ -826,13 +877,13 @@ const WTAblauf = () => {
                         <span className="status-badge missing" title="Diese Stunde ist vergangen, wurde aber noch nicht ausgefüllt!">
                           ⚠️ EINGABE FEHLT
                         </span>
-                      ) : activeNow && rowData.count === 0 && rowData.target_count === 0 ? (
+                      ) : activeNow && countNum === 0 ? (
                         <span className="status-badge live-hour">
                           ⚡ AKTUELL
                         </span>
-                      ) : rowData.target_count > 0 ? (
-                        <span className={`status-badge ${rowData.count > rowData.target_count ? 'over-met' : isMet ? 'met' : 'behind'}`}>
-                          {rowData.count > rowData.target_count ? 'ÜBERERFÜLLT' : isMet ? 'ERFÜLLT' : 'RÜCKSTAND'}
+                      ) : targetNum > 0 ? (
+                        <span className={`status-badge ${countNum > targetNum ? 'over-met' : isMet ? 'met' : 'behind'}`}>
+                          {countNum > targetNum ? 'ÜBERERFÜLLT' : isMet ? 'ERFÜLLT' : 'RÜCKSTAND'}
                         </span>
                       ) : '-'}
                     </div>
@@ -925,6 +976,181 @@ const WTAblauf = () => {
           </div>
         </div>
       ) : renderStats()}
+
+      {showKWPicker && (
+        <div className="kw-modal-overlay animate-fade-in" onClick={() => setShowKWPicker(false)} style={{
+          position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+          background: 'rgba(5, 8, 14, 0.82)', backdropFilter: 'blur(12px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999,
+          padding: '20px'
+        }}>
+          <div className="kw-modal-content glass-panel" onClick={e => e.stopPropagation()} style={{
+            background: 'linear-gradient(145deg, rgba(18, 24, 34, 0.95) 0%, rgba(10, 14, 22, 0.98) 100%)',
+            border: '1px solid rgba(0, 242, 254, 0.35)',
+            borderRadius: '20px', padding: '28px', width: '100%', maxWidth: '720px',
+            maxHeight: '88vh', display: 'flex', flexDirection: 'column', gap: '20px',
+            boxShadow: '0 25px 60px rgba(0, 0, 0, 0.9), 0 0 30px rgba(0, 242, 254, 0.12)'
+          }}>
+            {/* Modal Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{
+                  background: 'rgba(0, 242, 254, 0.12)', padding: '10px', borderRadius: '12px',
+                  border: '1px solid rgba(0, 242, 254, 0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}>
+                  <Calendar className="text-accent" size={22} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, textTransform: 'uppercase', color: '#fff', fontSize: '1.25rem', letterSpacing: '1.5px', fontWeight: 800 }}>
+                    Kalenderwoche wählen
+                  </h3>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', letterSpacing: '0.5px' }}>
+                    Schnellauswahl für Schicht- und Produktionsberichte
+                  </span>
+                </div>
+              </div>
+              
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                {/* Year Selector */}
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: '4px',
+                  background: 'rgba(0, 0, 0, 0.4)', border: '1px solid rgba(255, 255, 255, 0.12)',
+                  borderRadius: '10px', padding: '4px 8px'
+                }}>
+                  <button 
+                    onClick={() => setPickerYear(y => y - 1)} 
+                    style={{ background: 'transparent', border: 'none', color: '#aaa', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '4px' }}
+                    title="Vorheriges Jahr"
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+                  <span style={{ fontWeight: 800, color: 'var(--accent-cyan)', fontSize: '0.95rem', minWidth: '45px', textAlign: 'center', fontFamily: 'var(--font-mono)' }}>
+                    {pickerYear}
+                  </span>
+                  <button 
+                    onClick={() => setPickerYear(y => y + 1)} 
+                    style={{ background: 'transparent', border: 'none', color: '#aaa', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '4px' }}
+                    title="Nächstes Jahr"
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+
+                {/* Close Button */}
+                <button 
+                  onClick={() => setShowKWPicker(false)}
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.15)',
+                    color: '#aaa', width: '36px', height: '36px', borderRadius: '50%', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s'
+                  }}
+                  title="Schließen"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Jump Bar */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+              <button 
+                onClick={() => {
+                  setSelectedDate(getProductionDate(new Date()));
+                  setPickerYear(getYear(new Date()));
+                  setShowKWPicker(false);
+                }}
+                style={{
+                  background: 'linear-gradient(135deg, rgba(46, 204, 113, 0.2) 0%, rgba(46, 204, 113, 0.05) 100%)',
+                  border: '1px solid rgba(46, 204, 113, 0.4)',
+                  color: '#2ecc71', padding: '8px 16px', borderRadius: '10px',
+                  fontSize: '0.85rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px',
+                  boxShadow: '0 0 15px rgba(46, 204, 113, 0.15)', transition: 'all 0.2s'
+                }}
+              >
+                <CheckCircle2 size={16} /> Aktuelle Woche (KW {getISOWeek(getProductionDate(new Date()))})
+              </button>
+
+              <div style={{ fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.5)', fontFamily: 'var(--font-mono)' }}>
+                Ausgewählt: <strong style={{ color: 'var(--accent-cyan)' }}>KW {getISOWeek(selectedDate)}</strong> ({format(startOfWeek(selectedDate, { weekStartsOn: 1 }), 'dd.MM.')} - {format(endOfWeek(selectedDate, { weekStartsOn: 1 }), 'dd.MM.')})
+              </div>
+            </div>
+
+            {/* 52 Weeks Grid with Date Ranges */}
+            <div 
+              className="custom-kw-scroll"
+              style={{
+                display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(95px, 1fr))',
+                gap: '10px', overflowY: 'auto', maxHeight: '52vh', paddingRight: '6px'
+              }}
+            >
+              {Array.from({ length: 52 }, (_, i) => i + 1).map(kwNum => {
+                const isCurrentKW = pickerYear === getYear(new Date()) && kwNum === getISOWeek(getProductionDate(new Date()));
+                const isSelectedKW = pickerYear === getYear(selectedDate) && kwNum === getISOWeek(selectedDate);
+                
+                // Calculate week date range
+                const baseDate = new Date(pickerYear, 0, 4);
+                const weekDate = setISOWeek(baseDate, kwNum);
+                const wStart = format(startOfWeek(weekDate, { weekStartsOn: 1 }), 'dd.MM.');
+                const wEnd = format(endOfWeek(weekDate, { weekStartsOn: 1 }), 'dd.MM.');
+
+                return (
+                  <button
+                    key={kwNum}
+                    ref={isSelectedKW ? activeKWRef : null}
+                    onClick={() => handleSelectKW(kwNum)}
+                    className="kw-card-btn"
+                    style={{
+                      background: isSelectedKW 
+                        ? 'linear-gradient(135deg, #00f2fe 0%, #4facfe 100%)' 
+                        : isCurrentKW 
+                          ? 'rgba(46, 204, 113, 0.15)' 
+                          : 'rgba(23, 28, 36, 0.7)',
+                      color: isSelectedKW ? '#0a0c10' : isCurrentKW ? '#2ecc71' : '#fff',
+                      border: isSelectedKW 
+                        ? '1px solid #00f2fe' 
+                        : isCurrentKW 
+                          ? '1px solid #2ecc71' 
+                          : '1px solid rgba(255, 255, 255, 0.08)',
+                      padding: '12px 6px',
+                      borderRadius: '12px',
+                      cursor: 'pointer',
+                      transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '3px',
+                      boxShadow: isSelectedKW ? '0 0 20px rgba(0, 242, 254, 0.4)' : isCurrentKW ? '0 0 10px rgba(46, 204, 113, 0.2)' : 'none',
+                      position: 'relative'
+                    }}
+                  >
+                    <span style={{ fontSize: '0.95rem', fontWeight: 800, fontFamily: 'var(--font-mono)' }}>
+                      KW {kwNum}
+                    </span>
+                    <span style={{
+                      fontSize: '0.65rem',
+                      opacity: isSelectedKW ? 0.85 : 0.6,
+                      fontFamily: 'var(--font-mono)',
+                      fontWeight: 600
+                    }}>
+                      {wStart} - {wEnd}
+                    </span>
+                    {isCurrentKW && (
+                      <span style={{
+                        fontSize: '0.55rem', fontWeight: 800, textTransform: 'uppercase',
+                        background: isSelectedKW ? 'rgba(0,0,0,0.3)' : 'rgba(46, 204, 113, 0.25)',
+                        padding: '1px 6px', borderRadius: '4px', marginTop: '2px', letterSpacing: '0.5px'
+                      }}>
+                        ● HEUTE
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

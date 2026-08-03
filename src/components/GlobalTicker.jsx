@@ -2,11 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { getDeptDisplay, stripHtml } from '../utils/helpers';
 import { useApp } from '../context/AppContext';
 import { supabase } from '../supabase';
-import { Check, User, AlertCircle, Bell, Info, ChevronUp, ChevronDown } from 'lucide-react';
+import { Check, User, AlertCircle, Bell, Info, ChevronUp, ChevronDown, Monitor } from 'lucide-react';
 import { translations } from '../utils/translations';
 
 const GlobalTicker = ({ activeInfos = [] }) => {
-  const { staff, fetchActiveInfos, lang, isMobile } = useApp();
+  const { staff, fetchActiveInfos, lang, isMobile, autoScale, toggleAutoScale } = useApp();
   const t = translations[lang];
   const [page, setPage] = useState(0);
   const [showSelector, setShowSelector] = useState(false);
@@ -84,9 +84,19 @@ const GlobalTicker = ({ activeInfos = [] }) => {
         
         <div className="ticker-content-wrapper" aria-hidden={isCollapsed}>
           <div className="ticker-header-info">
-            <span className="ticker-total-count">
-              {page * itemsPerPage + 1}-{Math.min((page + 1) * itemsPerPage, priorityInfos.length)} / {priorityInfos.length} INFOS
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span className="ticker-total-count">
+                {page * itemsPerPage + 1}-{Math.min((page + 1) * itemsPerPage, priorityInfos.length)} / {priorityInfos.length} INFOS
+              </span>
+              <button 
+                className={`auto-fit-btn ${autoScale ? 'active' : ''}`}
+                onClick={toggleAutoScale}
+                title={autoScale ? "Auto-Fit aktiv: Automatisches Képernyő-Skálázás" : "Standard Modus: Normales Képernyő-Skálázás"}
+              >
+                <Monitor size={12} />
+                <span>{autoScale ? "AUTO-FIT ON" : "AUTO-FIT OFF"}</span>
+              </button>
+            </div>
             {priorityInfos.length > itemsPerPage && (
               <div className="more-indicator-badge">
                  +{priorityInfos.length - itemsPerPage} WEITERE

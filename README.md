@@ -3,6 +3,10 @@
 Ein modulares, industrielles Dashboard für die Produktionsüberwachung und Schichtverwaltung, optimiert für den Einsatz in Galvanikbetrieben (z.B. Collini KS-24).
 
 ## ✨ Neue Funktionen & Updates
+- **Dynamic Viewport Auto-Scaling (Fit-to-Screen)**: Automatisches Képernyő-Skálázás für kleinere Monitore & Laptops mit Ein/Aus-Schalter (`AUTO-FIT ON/OFF`).
+- **Interaktiver Kalenderwoche (KW) Selector**: Direktes Umschalten zwischen allen 52 Kalenderwochen mit Datumskanal-Vorschau (`03.08. - 09.08.`), Zentaural-Scroll und Jahr-Wechsler.
+- **WT-Ablauf Dezimal-Ziele & Präzision**: Unterstützung für Fließkomma WT-Ziele (z.B. `3,25`, `0,5`) mit exakter `round2` Summen- und Effizienzberechnung.
+- **Fehlende Eingabe Warnsystem (`⚠️ EINGABE FEHLT`)**: Gezielte Überprüfung verfangener Stunden für Stunden mit festgelegtem Ziel (`Ziel > 0`).
 
 ## Hauptfunktionen
 - **Collini Industrial Suite**: Eine modulare Plattform für Produktionslinien.
@@ -13,7 +17,6 @@ Ein modulares, industrielles Dashboard für die Produktionsüberwachung und Schi
 - **Digitales Logbuch**: Echtzeit-Protokollierung von Ereignissen und Reparaturen.
 - **Info-Wall**: Zentrale Informationsanzeige für Mitarbeiter und Management.
 - **Admin-Bereich**: Konfiguration von Produkten, Personal und Systemparametern.
-- **Admin**: Zentrales Management für Produkte, Personal und Anlagenkonfiguration.
 
 ## 🚀 Live Access
 - **URL:** [collini-industrial-suite.vercel.app](https://collini-industrial-suite.vercel.app)
@@ -24,7 +27,7 @@ Ein modulares, industrielles Dashboard für die Produktionsüberwachung und Schi
 - **Architecture:** Modular Domain-Driven Design (MDDD)
 - **State Management:** React Context API (Centralized Global State)
 - **Icons:** Lucide React (Industrial iconography)
-- **Styling:** Custom CSS3 (Industrial Dark Theme, Glassmorphism, Outfit Typography)
+- **Styling:** Custom CSS3 (Industrial Dark Theme, Glassmorphism, Outfit & IBM Plex Typography)
 - **Backend/Database:** Supabase (PostgreSQL)
 - **Deployment:** Vercel
 - **PWA:** Manifest support for home screen installation.
@@ -54,14 +57,19 @@ Ein modulares, industrielles Dashboard für die Produktionsüberwachung und Schi
 - Automatic expiration and priority-based highlighting.
 - Global Ticker integration for critical updates.
 
-### 5. Admin Dashboard
+### 5. WT-Ablauf (Production Tracking)
+- Real-time hourly tracking of production actuals vs decimal targets across 8h and 12h shifts.
+- Interactive KW (Calendar Week) selection modal with date ranges.
+- Hourly quality toggle (`i.O.` / `n.i.O.`) and missing entry alerts.
+
+### 6. Admin Dashboard
 - Centralized management of products, departments, and personnel.
 - Secure access control.
 - Dynamic configuration of module-specific settings.
 
 ## 📂 Project Structure
 - `src/context/`: Global application state and translations.
-- `src/modules/`: Isolated feature modules (Hub, Calculator, Logbook, etc.).
+- `src/modules/`: Isolated feature modules (Hub, Calculator, Logbook, WTAblauf, etc.).
 - `src/components/`: Reusable UI components.
 - `src/utils/`: Shared helper functions and localization.
 - `src/assets/`: Branding and static resources.
@@ -72,5 +80,5 @@ Ein modulares, industrielles Dashboard für die Produktionsüberwachung und Schi
 - [ ] **Wartungsplaner:** Automated maintenance scheduling and alerts.
 
 ---
-*Documentation updated: 2026-05-12*
+*Documentation updated: 2026-08-03*
 *Created by: Horvat Tamás*

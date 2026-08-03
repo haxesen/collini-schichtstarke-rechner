@@ -32,10 +32,34 @@ function App() {
     selectedLine,
     isLoading,
     isOffline,
-    t
+    t,
+    autoScale,
+    isMobile
   } = useApp();
 
   const [isFullscreen, setIsFullscreen] = useState(!!document.fullscreenElement);
+  const [scaleFactor, setScaleFactor] = useState(1);
+
+  useEffect(() => {
+    const updateScale = () => {
+      if (!autoScale || isMobile) {
+        setScaleFactor(1);
+        return;
+      }
+      const targetWidth = 1600;
+      const currentWidth = window.innerWidth;
+      if (currentWidth < targetWidth && currentWidth >= 768) {
+        const scale = Math.min(1, Math.max(0.65, currentWidth / targetWidth));
+        setScaleFactor(scale);
+      } else {
+        setScaleFactor(1);
+      }
+    };
+
+    updateScale();
+    window.addEventListener('resize', updateScale);
+    return () => window.removeEventListener('resize', updateScale);
+  }, [autoScale, isMobile]);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -122,11 +146,20 @@ function App() {
 
   return (
     <div className="full-view-wrapper">
-      <GlobalTicker activeInfos={activeInfos} />
-      
-      <main className={`app-container ${['hub', 'logbook', 'info_wall', 'calculator', 'wtAblauf', 'chemNickel'].includes(view) ? 'wide-container' : ''}`}>
-        {renderView()}
-      </main>
+      <div 
+        className="auto-scale-wrapper"
+        style={{
+          transform: scaleFactor < 1 ? `scale(${scaleFactor})` : 'none',
+          transformOrigin: 'top center',
+          width: scaleFactor < 1 ? `${(100 / scaleFactor).toFixed(2)}%` : '100%'
+        }}
+      >
+        <GlobalTicker activeInfos={activeInfos} />
+        
+        <main className={`app-container ${['hub', 'logbook', 'info_wall', 'calculator', 'wtAblauf', 'chemNickel'].includes(view) ? 'wide-container' : ''}`}>
+          {renderView()}
+        </main>
+      </div>
 
       {showAdminLogin && <AdminLogin />}
       {showManager && isAdmin && <AdminManager />}

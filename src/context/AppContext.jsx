@@ -313,6 +313,19 @@ export const AppProvider = ({ children }) => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  const [autoScale, setAutoScale] = useState(() => {
+    const saved = localStorage.getItem('collini_auto_scale');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
+
+  const toggleAutoScale = () => {
+    setAutoScale(prev => {
+      const next = !prev;
+      localStorage.setItem('collini_auto_scale', JSON.stringify(next));
+      return next;
+    });
+  };
+
   return (
     <AppContext.Provider value={{ 
       lang,
@@ -332,7 +345,8 @@ export const AppProvider = ({ children }) => {
       maintenanceTasks, setMaintenanceTasks,
       maintenanceStaffCount, setMaintenanceStaffCount,
       saveMaintenanceLog,
-      isMobile
+      isMobile,
+      autoScale, setAutoScale, toggleAutoScale
     }}>
 
       {children}
